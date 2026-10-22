@@ -12,6 +12,8 @@
         button { padding: 8px 15px; background: #007bff; color: #fff; border: none; cursor: pointer; }
         button:hover { background: #0056b3; }
     </style>
+    <!-- Подключаем декодер для чтения ссылок m3u8 (VK, Rutube, Аллоха) -->
+    <script src="https://jsdelivr.net"></script>
 </head>
 <body>
 
@@ -19,11 +21,11 @@
     <h1>Наш Личный Кинотеатр</h1>
     
     <div class="controls">
-        <p>Статус: <b id="status" style="color: #ffcc00;">Подключение к серверу...</b></p>
+        <p>Статус: <b id="status" style="color: #ffcc00;">Подключение...</b></p>
     </div>
 
     <div class="controls">
-        <input type="text" id="video-url" placeholder="Вставь прямую ссылку (.mp4) с пиратского сайта">
+        <input type="text" id="video-url" placeholder="Вставь прямую ссылку (.mp4 или .m3u8)">
         <button id="load-video-btn">Включить для двоих</button>
     </div>
 
@@ -36,11 +38,10 @@
     const videoUrlInput = document.getElementById('video-url');
     const loadVideoBtn = document.getElementById('load-video-btn');
 
-    // К какому серверу подключаемся (пока тестишь сам — localhost, для девушки потом заменим на ссылку туннеля)
     const SERVER_HOST = 'localhost:8080'; 
-
     const socket = new WebSocket('ws://' + SERVER_HOST);
     let isInternalChange = false;
+    let hls = null;
 
     socket.onopen = () => {
         statusDisplay.innerText = "Кинотеатр готов к работе!";
@@ -52,6 +53,34 @@
         statusDisplay.style.color = "#ff3333";
     };
 
+    // Умная функция загрузки видео (поддерживает и mp4, и m3u8 потоки)
+    function setVideoSource(rawUrl) {
+        // Пропускаем ссылку через твой прокси-сервер на ПК для обхода CORS блокировок
+        const proxiedUrl = 'http://' + SERVER_HOST + '/video?url=' + encodeURIComponent(rawUrl);
+
+        if (rawUrl.includes('.m3u8')) {
+            if (hls) { hls.destroy(); } // Уничтожаем старый поток, если он был
+            
+            if (Hls.isSupported()) {
+                hls = new Hls({
+                    xhrSetup: function (xhr) {
+                        xhr.withCredentials = false; // Отключаем куки, чтобы базы не ругались
+                    }
+                });
+                hls.loadSource(proxiedUrl);
+                hls.attachMedia(video);
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                // Для Safari на смартфонах
+                video.src = proxiedUrl;
+            }
+        } else {
+            // Если вставили обычный .mp4
+            if (hls) { hls.destroy(); hls = null; }
+            video.src = proxiedUrl;
+        }
+        video.load();
+    }
+
     socket.onmessage = (event) => {
         const data = JSON.parse(event.data);
         isInternalChange = true;
@@ -59,11 +88,7 @@
         if (data.type === 'PLAY') video.play().catch(() => {});
         if (data.type === 'PAUSE') video.pause();
         if (data.type === 'SEEK') video.currentTime = data.time;
-        if (data.type === 'SRC') {
-            // Магия: заставляем плеер девушки брать видео через твой сервер-прокси
-            video.src = 'http://' + SERVER_HOST + '/video?url=' + encodeURIComponent(data.url);
-            video.load();
-        }
+        if (data.type === 'SRC') { setVideoSource(data.url); }
 
         setTimeout(() => { isInternalChange = false; }, 400);
     };
@@ -71,8 +96,7 @@
     loadVideoBtn.addEventListener('click', () => {
         const url = videoUrlInput.value.trim();
         if (url) {
-            video.src = 'http://' + SERVER_HOST + '/video?url=' + encodeURIComponent(url);
-            video.load();
+            setVideoSource(url);
             socket.send(JSON.stringify({ type: 'SRC', url: url }));
         }
     });
