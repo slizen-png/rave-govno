@@ -8,10 +8,9 @@
         .container { max-width: 800px; margin: 0 auto; text-align: center; }
         video { width: 100%; max-height: 450px; background: #000; margin-top: 15px; }
         .controls { margin: 15px 0; padding: 15px; background: #222; border-radius: 5px; }
-        input[type="file"] { display: none; }
-        .file-btn { padding: 10px 20px; background: #007bff; color: #fff; border: none; cursor: pointer; border-radius: 4px; display: inline-block; }
-        .file-btn:hover { background: #0056b3; }
-        #file-name { margin-top: 10px; color: #aaa; font-size: 14px; }
+        input { padding: 8px; width: 60%; background: #333; color: #fff; border: 1px solid #555; }
+        button { padding: 8px 15px; background: #007bff; color: #fff; border: none; cursor: pointer; }
+        button:hover { background: #0056b3; }
     </style>
 </head>
 <body>
@@ -24,48 +23,35 @@
     </div>
 
     <div class="controls">
-        <label class="file-btn">
-            📁 Выбрать фильм с компьютера
-            <input type="file" id="file-input" accept="video/*">
-        </label>
-        <div id="file-name">Файл не выбран. У вас с девушкой должен быть один и тот же файл!</div>
+        <input type="text" id="video-url" placeholder="Вставь прямую ссылку (.mp4) с пиратского сайта">
+        <button id="load-video-btn">Включить для двоих</button>
     </div>
 
-    <video id="shared-video" controls></video>
+    <video id="shared-video" controls autoplay></video>
 </div>
 
 <script>
     const video = document.getElementById('shared-video');
     const statusDisplay = document.getElementById('status');
-    const fileInput = document.getElementById('file-input');
-    const fileNameDisplay = document.getElementById('file-name');
+    const videoUrlInput = document.getElementById('video-url');
+    const loadVideoBtn = document.getElementById('load-video-btn');
 
-    // Подключаемся к твоему серверу на Node.js
-    const socket = new WebSocket('ws://localhost:8080');
+    // К какому серверу подключаемся (пока тестишь сам — localhost, для девушки потом заменим на ссылку туннеля)
+    const SERVER_HOST = 'localhost:8080'; 
+
+    const socket = new WebSocket('ws://' + SERVER_HOST);
     let isInternalChange = false;
 
     socket.onopen = () => {
-        statusDisplay.innerText = "Соединение установлено! Сервер на ПК работает.";
+        statusDisplay.innerText = "Кинотеатр готов к работе!";
         statusDisplay.style.color = "#00ff00";
     };
 
     socket.onerror = () => {
-        statusDisplay.innerText = "Ошибка подключения. Убедись, что окно CMD с сервером открыто!";
+        statusDisplay.innerText = "Ошибка подключения к твоему ПК.";
         statusDisplay.style.color = "#ff3333";
     };
 
-    // Локальное открытие файла (обходим CORS защиту браузера)
-    fileInput.addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (file) {
-            fileNameDisplay.innerText = "Выбран файл: " + file.name;
-            const fileURL = URL.createObjectURL(file);
-            video.src = fileURL;
-            video.load();
-        }
-    });
-
-    // Ловим команды от сервера
     socket.onmessage = (event) => {
         const data = JSON.parse(event.data);
         isInternalChange = true;
@@ -73,28 +59,27 @@
         if (data.type === 'PLAY') video.play().catch(() => {});
         if (data.type === 'PAUSE') video.pause();
         if (data.type === 'SEEK') video.currentTime = data.time;
+        if (data.type === 'SRC') {
+            // Магия: заставляем плеер девушки брать видео через твой сервер-прокси
+            video.src = 'http://' + SERVER_HOST + '/video?url=' + encodeURIComponent(data.url);
+            video.load();
+        }
 
         setTimeout(() => { isInternalChange = false; }, 400);
     };
 
-    // Отправляем команды на сервер
-    video.addEventListener('play', () => {
-        if (!isInternalChange && socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({ type: 'PLAY' }));
+    loadVideoBtn.addEventListener('click', () => {
+        const url = videoUrlInput.value.trim();
+        if (url) {
+            video.src = 'http://' + SERVER_HOST + '/video?url=' + encodeURIComponent(url);
+            video.load();
+            socket.send(JSON.stringify({ type: 'SRC', url: url }));
         }
     });
 
-    video.addEventListener('pause', () => {
-        if (!isInternalChange && socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({ type: 'PAUSE' }));
-        }
-    });
-
-    video.addEventListener('seeked', () => {
-        if (!isInternalChange && socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({ type: 'SEEK', time: video.currentTime }));
-        }
-    });
+    video.addEventListener('play', () => { if (!isInternalChange) socket.send(JSON.stringify({ type: 'PLAY' })); });
+    video.addEventListener('pause', () => { if (!isInternalChange) socket.send(JSON.stringify({ type: 'PAUSE' })); });
+    video.addEventListener('seeked', () => { if (!isInternalChange) socket.send(JSON.stringify({ type: 'SEEK', time: video.currentTime })); });
 </script>
 
 </body>
