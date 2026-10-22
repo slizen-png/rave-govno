@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>плеер</title>
+    <title>Наш Личный Кинотеатр</title>
     <style>
         body { font-family: sans-serif; background: #111; color: #fff; padding: 20px; }
         .container { max-width: 800px; margin: 0 auto; text-align: center; }
@@ -16,10 +16,10 @@
 <body>
 
 <div class="container">
-    <h1>суканах</h1>
+    <h1>Наш Личный Кинотеатр</h1>
     
     <div class="controls">
-        <p>Статус комнаты: <b id="status" style="color: #ffcc00;">Подключение к серверу...</b></p>
+        <p>Статус: <b id="status" style="color: #ffcc00;">Подключение...</b></p>
     </div>
 
     <div class="controls">
@@ -36,16 +36,16 @@
     const videoUrlInput = document.getElementById('video-url');
     const loadVideoBtn = document.getElementById('load-video-btn');
 
-    const socket = new WebSocket('wss://://piehost.com');
+    const socket = new WebSocket('ws://localhost:8080');
     let isInternalChange = false;
 
     socket.onopen = () => {
-        statusDisplay.innerText = "Онлайн! Комната готова.";
+        statusDisplay.innerText = "Соединение установлено! Наш сервер на ПК работает.";
         statusDisplay.style.color = "#00ff00";
     };
 
     socket.onerror = () => {
-        statusDisplay.innerText = "Ошибка сервера. Но мы все равно прорвемся!";
+        statusDisplay.innerText = "Ошибка подключения к серверу. Убедись, что CMD на ПК открыта!";
         statusDisplay.style.color = "#ff3333";
     };
 
