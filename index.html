@@ -12,7 +12,6 @@
         button { padding: 8px 15px; background: #007bff; color: #fff; border: none; cursor: pointer; }
         button:hover { background: #0056b3; }
     </style>
-    <!-- Подключаем скачанный локальный файл вместо ссылки из интернета -->
     <script src="peerjs.min.js"></script>
 </head>
 <body>
@@ -44,9 +43,16 @@
     const videoUrlInput = document.getElementById('video-url');
     const loadVideoBtn = document.getElementById('load-video-btn');
 
-     // Подключаемся к официальному живому облаку PeerJS
-    let peer = new Peer(); 
-
+    // Подключаем стабильные сервера Google для обхода ограничений сети
+    let peer = new Peer({
+        config: {
+            'iceServers': [
+                { 'urls': 'stun:://google.com' },
+                { 'urls': 'stun:://google.com' },
+                { 'urls': 'stun:://google.com' }
+            ]
+        }
+    });
     
     let conn = null;
     let isInternalChange = false;
@@ -57,7 +63,7 @@
     });
 
     peer.on('error', (err) => {
-        statusDisplay.innerText = "Ошибка: " + err.type;
+        statusDisplay.innerText = "Ошибка подключения. Обновите страницу.";
         console.error(err);
     });
 
@@ -72,7 +78,7 @@
         if (peerId) {
             conn = peer.connect(peerId);
             setupConnection();
-            statusDisplay.innerText = "Подключение к девушке...";
+            statusDisplay.innerText = "Подключение...";
         }
     });
 
