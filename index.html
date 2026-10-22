@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Наш Плеер</title>
+    <title>плеер</title>
     <style>
         body { font-family: sans-serif; background: #111; color: #fff; padding: 20px; }
         .container { max-width: 800px; margin: 0 auto; text-align: center; }
@@ -16,11 +16,10 @@
 <body>
 
 <div class="container">
-    <h1>Кинотеатр для двоих</h1>
+    <h1>суканах</h1>
     
     <div class="controls">
         <p>Статус комнаты: <b id="status" style="color: #ffcc00;">Подключение к серверу...</b></p>
-        <p>Чтобы девушка подключилась, просто отправьте ей ССЫЛКУ на этот сайт!</p>
     </div>
 
     <div class="controls">
@@ -37,7 +36,6 @@
     const videoUrlInput = document.getElementById('video-url');
     const loadVideoBtn = document.getElementById('load-video-btn');
 
-    // Используем вечный бесплатный демонстрационный WebSocket-сервер
     const socket = new WebSocket('wss://://piehost.com');
     let isInternalChange = false;
 
@@ -51,7 +49,6 @@
         statusDisplay.style.color = "#ff3333";
     };
 
-    // Слушаем команды от второго человека
     socket.onmessage = (event) => {
         const data = JSON.parse(event.data);
         isInternalChange = true;
@@ -64,7 +61,6 @@
         setTimeout(() => { isInternalChange = false; }, 200);
     };
 
-    // Отправляем команды при действиях в плеере
     video.addEventListener('play', () => {
         if (!isInternalChange) socket.send(JSON.stringify({ type: 'PLAY' }));
     });
@@ -75,7 +71,6 @@
         if (!isInternalChange) socket.send(JSON.stringify({ type: 'SEEK', time: video.currentTime }));
     });
 
-    // Загрузка ссылки на видео
     loadVideoBtn.addEventListener('click', () => {
         const url = videoUrlInput.value.trim();
         if (url) {
