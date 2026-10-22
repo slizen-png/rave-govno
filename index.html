@@ -12,18 +12,15 @@
         button { padding: 8px 15px; background: #007bff; color: #fff; border: none; cursor: pointer; }
         button:hover { background: #0056b3; }
     </style>
-    <script src="https://cloudflare.com"></script>
 </head>
 <body>
 
 <div class="container">
-    <h1>Синхронный плеер</h1>
+    <h1>Кинотеатр для двоих</h1>
     
     <div class="controls">
-        <p>Ваш ID для подключения: <b id="my-id" style="color: #ffcc00;">Загрузка...</b></p>
-        <input type="text" id="peer-id-input" placeholder="Введи ID для подключения">
-        <button id="connect-btn">Подключиться</button>
-        <p id="status" style="color: #00ff00;"></p>
+        <p>Статус комнаты: <b id="status" style="color: #ffcc00;">Подключение к серверу...</b></p>
+        <p>Чтобы девушка подключилась, просто отправьте ей ССЫЛКУ на этот сайт!</p>
     </div>
 
     <div class="controls">
@@ -36,81 +33,55 @@
 
 <script>
     const video = document.getElementById('shared-video');
-    const myIdDisplay = document.getElementById('my-id');
-    const peerIdInput = document.getElementById('peer-id-input');
-    const connectBtn = document.getElementById('connect-btn');
     const statusDisplay = document.getElementById('status');
     const videoUrlInput = document.getElementById('video-url');
     const loadVideoBtn = document.getElementById('load-video-btn');
 
-    // Подключаем стабильные сервера Google для обхода ограничений сети
-    let peer = new Peer({
-        config: {
-            'iceServers': [
-                { 'urls': 'stun:://google.com' },
-                { 'urls': 'stun:://google.com' },
-                { 'urls': 'stun:://google.com' }
-            ]
-        }
-    });
-    
-    let conn = null;
+    // Используем вечный бесплатный демонстрационный WebSocket-сервер
+    const socket = new WebSocket('wss://://piehost.com');
     let isInternalChange = false;
 
-    peer.on('open', (id) => { 
-        myIdDisplay.innerText = id; 
-        statusDisplay.innerText = "Готов к подключению!";
-    });
+    socket.onopen = () => {
+        statusDisplay.innerText = "Онлайн! Комната готова.";
+        statusDisplay.style.color = "#00ff00";
+    };
 
-    peer.on('error', (err) => {
-        statusDisplay.innerText = "Ошибка подключения. Обновите страницу.";
-        console.error(err);
-    });
+    socket.onerror = () => {
+        statusDisplay.innerText = "Ошибка сервера. Но мы все равно прорвемся!";
+        statusDisplay.style.color = "#ff3333";
+    };
 
-    peer.on('connection', (connection) => {
-        conn = connection;
-        setupConnection();
-        statusDisplay.innerText = "Девушка подключилась!";
-    });
+    // Слушаем команды от второго человека
+    socket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        isInternalChange = true;
 
-    connectBtn.addEventListener('click', () => {
-        const peerId = peerIdInput.value.trim();
-        if (peerId) {
-            conn = peer.connect(peerId);
-            setupConnection();
-            statusDisplay.innerText = "Подключение...";
-        }
-    });
+        if (data.type === 'PLAY') video.play();
+        if (data.type === 'PAUSE') video.pause();
+        if (data.type === 'SEEK') video.currentTime = data.time;
+        if (data.type === 'SRC') { video.src = data.url; video.load(); }
 
-    function setupConnection() {
-        conn.on('open', () => { statusDisplay.innerText = "Связь успешно установлена!"; });
-        
-        conn.on('data', (data) => {
-            isInternalChange = true;
-            if (data.type === 'PLAY') { video.play(); }
-            if (data.type === 'PAUSE') { video.pause(); }
-            if (data.type === 'SEEK') { video.currentTime = data.time; }
-            if (data.type === 'SRC') { video.src = data.url; video.load(); }
-            setTimeout(() => { isInternalChange = false; }, 200);
-        });
-    }
+        setTimeout(() => { isInternalChange = false; }, 200);
+    };
 
+    // Отправляем команды при действиях в плеере
     video.addEventListener('play', () => {
-        if (!isInternalChange && conn) conn.send({ type: 'PLAY' });
+        if (!isInternalChange) socket.send(JSON.stringify({ type: 'PLAY' }));
     });
     video.addEventListener('pause', () => {
-        if (!isInternalChange && conn) conn.send({ type: 'PAUSE' });
+        if (!isInternalChange) socket.send(JSON.stringify({ type: 'PAUSE' }));
     });
     video.addEventListener('seeking', () => {
-        if (!isInternalChange && conn) conn.send({ type: 'SEEK', time: video.currentTime });
+        if (!isInternalChange) socket.send(JSON.stringify({ type: 'SEEK', time: video.currentTime }));
     });
 
+    // Загрузка ссылки на видео
     loadVideoBtn.addEventListener('click', () => {
         const url = videoUrlInput.value.trim();
         if (url) {
             video.src = url;
             video.load();
-            if (conn) conn.send({ type: 'SRC', url: url });
+            socket.send(JSON.stringify({ type: 'SRC', url: url }));
         }
     });
 </script>
