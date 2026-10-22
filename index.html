@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Наш Плеер</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #fff; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; text-align: center; }
+        video { width: 100%; max-height: 450px; background: #000; margin-top: 10px; }
+        .controls { margin: 15px 0; padding: 10px; background: #222; border-radius: 5px; }
+        input { padding: 8px; width: 60%; background: #333; color: #fff; border: 1px solid #555; }
+        button { padding: 8px 15px; background: #007bff; color: #fff; border: none; cursor: pointer; }
+        button:hover { background: #0056b3; }
+    </style>
+    <!-- Подключаем скачанный локальный файл вместо ссылки из интернета -->
+    <script src="peerjs.min.js"></script>
+</head>
+<body>
+
+<div class="container">
+    <h1>Синхронный плеер</h1>
+    
+    <div class="controls">
+        <p>Ваш ID для подключения: <b id="my-id" style="color: #ffcc00;">Загрузка...</b></p>
+        <input type="text" id="peer-id-input" placeholder="Введи ID для подключения">
+        <button id="connect-btn">Подключиться</button>
+        <p id="status" style="color: #00ff00;"></p>
+    </div>
+
+    <div class="controls">
+        <input type="text" id="video-url" placeholder="Вставь прямую ссылку на видео (.mp4)">
+        <button id="load-video-btn">Открыть видео</button>
+    </div>
+
+    <video id="shared-video" controls></video>
+</div>
+
+<script>
+    const video = document.getElementById('shared-video');
+    const myIdDisplay = document.getElementById('my-id');
+    const peerIdInput = document.getElementById('peer-id-input');
+    const connectBtn = document.getElementById('connect-btn');
+    const statusDisplay = document.getElementById('status');
+    const videoUrlInput = document.getElementById('video-url');
+    const loadVideoBtn = document.getElementById('load-video-btn');
+
+     // Подключаемся к официальному живому облаку PeerJS
+    let peer = new Peer(); 
+
+    
+    let conn = null;
+    let isInternalChange = false;
+
+    peer.on('open', (id) => { 
+        myIdDisplay.innerText = id; 
+        statusDisplay.innerText = "Готов к подключению!";
+    });
+
+    peer.on('error', (err) => {
+        statusDisplay.innerText = "Ошибка: " + err.type;
+        console.error(err);
+    });
+
+    peer.on('connection', (connection) => {
+        conn = connection;
+        setupConnection();
+        statusDisplay.innerText = "Девушка подключилась!";
+    });
+
+    connectBtn.addEventListener('click', () => {
+        const peerId = peerIdInput.value.trim();
+        if (peerId) {
+            conn = peer.connect(peerId);
+            setupConnection();
+            statusDisplay.innerText = "Подключение к девушке...";
+        }
+    });
+
+    function setupConnection() {
+        conn.on('open', () => { statusDisplay.innerText = "Связь успешно установлена!"; });
+        
+        conn.on('data', (data) => {
+            isInternalChange = true;
+            if (data.type === 'PLAY') { video.play(); }
+            if (data.type === 'PAUSE') { video.pause(); }
+            if (data.type === 'SEEK') { video.currentTime = data.time; }
+            if (data.type === 'SRC') { video.src = data.url; video.load(); }
+            setTimeout(() => { isInternalChange = false; }, 200);
+        });
+    }
+
+    video.addEventListener('play', () => {
+        if (!isInternalChange && conn) conn.send({ type: 'PLAY' });
+    });
+    video.addEventListener('pause', () => {
+        if (!isInternalChange && conn) conn.send({ type: 'PAUSE' });
+    });
+    video.addEventListener('seeking', () => {
+        if (!isInternalChange && conn) conn.send({ type: 'SEEK', time: video.currentTime });
+    });
+
+    loadVideoBtn.addEventListener('click', () => {
+        const url = videoUrlInput.value.trim();
+        if (url) {
+            video.src = url;
+            video.load();
+            if (conn) conn.send({ type: 'SRC', url: url });
+        }
+    });
+</script>
+
+</body>
+</html>
