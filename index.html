@@ -6,13 +6,14 @@
     <style>
         body { font-family: sans-serif; background: #111; color: #fff; padding: 20px; }
         .container { max-width: 800px; margin: 0 auto; text-align: center; }
-        video { width: 100%; max-height: 450px; background: #000; margin-top: 15px; }
+        video { width: 100%; max-height: 450px; background: #000; margin-top: 15px; border: 1px solid #333; }
         .controls { margin: 15px 0; padding: 15px; background: #222; border-radius: 5px; }
-        input { padding: 8px; width: 60%; background: #333; color: #fff; border: 1px solid #555; }
-        button { padding: 8px 15px; background: #007bff; color: #fff; border: none; cursor: pointer; }
+        input { padding: 10px; width: 65%; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; }
+        button { padding: 10px 20px; background: #007bff; color: #fff; border: none; cursor: pointer; border-radius: 4px; font-weight: bold; }
         button:hover { background: #0056b3; }
+        #error-msg { color: #ff3333; font-size: 14px; margin-top: 10px; font-weight: bold; }
     </style>
-    <!-- Подключаем декодер для чтения ссылок m3u8 (VK, Rutube, Аллоха) -->
+    <!-- Подключаем декодер для чтения потоков m3u8 -->
     <script src="https://jsdelivr.net"></script>
 </head>
 <body>
@@ -25,11 +26,12 @@
     </div>
 
     <div class="controls">
-        <input type="text" id="video-url" placeholder="Вставь прямую ссылку (.mp4 или .m3u8)">
+        <input type="text" id="video-url" placeholder="Вставь ссылку master.m3u8 со статусом 200">
         <button id="load-video-btn">Включить для двоих</button>
+        <div id="error-msg"></div>
     </div>
 
-    <video id="shared-video" controls autoplay></video>
+    <video id="shared-video" controls autoplay playsinline></video>
 </div>
 
 <script>
@@ -37,6 +39,7 @@
     const statusDisplay = document.getElementById('status');
     const videoUrlInput = document.getElementById('video-url');
     const loadVideoBtn = document.getElementById('load-video-btn');
+    const errorMsg = document.getElementById('error-msg');
 
     const SERVER_HOST = 'localhost:8080'; 
     const socket = new WebSocket('ws://' + SERVER_HOST);
@@ -46,38 +49,48 @@
     socket.onopen = () => {
         statusDisplay.innerText = "Кинотеатр готов к работе!";
         statusDisplay.style.color = "#00ff00";
+        errorMsg.innerText = "";
     };
 
     socket.onerror = () => {
         statusDisplay.innerText = "Ошибка подключения к твоему ПК.";
         statusDisplay.style.color = "#ff3333";
+        errorMsg.innerText = "Внимание: Убедись, что на ПК запущено черное окно CMD с сервером!";
     };
 
-    // Умная функция загрузки видео (поддерживает и mp4, и m3u8 потоки)
+    // Функция загрузки видеопотока через твой локальный прокси-сервер
     function setVideoSource(rawUrl) {
-        // Пропускаем ссылку через твой прокси-сервер на ПК для обхода CORS блокировок
+        errorMsg.innerText = "";
+        
+        // Кодируем ссылку, чтобы спецсимволы токена пиратов не ломали адрес прокси
         const proxiedUrl = 'http://' + SERVER_HOST + '/video?url=' + encodeURIComponent(rawUrl);
 
-        if (rawUrl.includes('.m3u8')) {
-            if (hls) { hls.destroy(); } // Уничтожаем старый поток, если он был
-            
-            if (Hls.isSupported()) {
-                hls = new Hls({
-                    xhrSetup: function (xhr) {
-                        xhr.withCredentials = false; // Отключаем куки, чтобы базы не ругались
-                    }
-                });
-                hls.loadSource(proxiedUrl);
-                hls.attachMedia(video);
-            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                // Для Safari на смартфонах
-                video.src = proxiedUrl;
-            }
-        } else {
-            // Если вставили обычный .mp4
-            if (hls) { hls.destroy(); hls = null; }
-            video.src = proxiedUrl;
+        if (hls) { 
+            hls.destroy(); 
+            hls = null;
         }
+
+        if (Hls.isSupported()) {
+            hls = new Hls({
+                maxBufferSize: 30 * 1000 * 1000, // 30MB буфер против лагов
+                enableWorker: true
+            });
+            hls.loadSource(proxiedUrl);
+            hls.attachMedia(video);
+            
+            hls.on(Hls.Events.ERROR, function (event, data) {
+                if (data.fatal) {
+                    errorMsg.innerText = "Ошибка воспроизведения потока. Возможно, ссылка устарела.";
+                    console.error("HLS fatal error:", data);
+                }
+            });
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            // Для Safari / iOS
+            video.src = proxiedUrl;
+        } else {
+            errorMsg.innerText = "Твой браузер не поддерживает воспроизведение этого формата видео.";
+        }
+        
         video.load();
     }
 
@@ -95,15 +108,20 @@
 
     loadVideoBtn.addEventListener('click', () => {
         const url = videoUrlInput.value.trim();
-        if (url) {
-            setVideoSource(url);
+        if (!url) {
+            errorMsg.innerText = "Поле ввода пустое! Вставь ссылку.";
+            return;
+        }
+        
+        setVideoSource(url);
+        if (socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify({ type: 'SRC', url: url }));
         }
     });
 
-    video.addEventListener('play', () => { if (!isInternalChange) socket.send(JSON.stringify({ type: 'PLAY' })); });
-    video.addEventListener('pause', () => { if (!isInternalChange) socket.send(JSON.stringify({ type: 'PAUSE' })); });
-    video.addEventListener('seeked', () => { if (!isInternalChange) socket.send(JSON.stringify({ type: 'SEEK', time: video.currentTime })); });
+    video.addEventListener('play', () => { if (!isInternalChange && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'PLAY' })); });
+    video.addEventListener('pause', () => { if (!isInternalChange && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'PAUSE' })); });
+    video.addEventListener('seeked', () => { if (!isInternalChange && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'SEEK', time: video.currentTime })); });
 </script>
 
 </body>
