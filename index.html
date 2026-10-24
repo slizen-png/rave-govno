@@ -13,7 +13,6 @@
         button:hover { background: #0056b3; }
         #error-msg { color: #ff3333; font-size: 14px; margin-top: 10px; font-weight: bold; }
     </style>
-    <!-- Подключаем декодер для чтения потоков m3u8 -->
     <script src="https://jsdelivr.net"></script>
 </head>
 <body>
@@ -26,7 +25,7 @@
     </div>
 
     <div class="controls">
-        <input type="text" id="video-url" placeholder="Вставь ссылку master.m3u8 со статусом 200">
+        <input type="text" id="video-url" placeholder="Вставь ссылку master.m3u8">
         <button id="load-video-btn">Включить для двоих</button>
         <div id="error-msg"></div>
     </div>
@@ -49,21 +48,22 @@
     socket.onopen = () => {
         statusDisplay.innerText = "Кинотеатр готов к работе!";
         statusDisplay.style.color = "#00ff00";
-        errorMsg.innerText = "";
     };
 
     socket.onerror = () => {
         statusDisplay.innerText = "Ошибка подключения к твоему ПК.";
         statusDisplay.style.color = "#ff3333";
-        errorMsg.innerText = "Внимание: Убедись, что на ПК запущено черное окно CMD с сервером!";
+        errorMsg.innerText = "Убедись, что на ПК запущено окно CMD (node server.js)!";
     };
 
-    // Функция загрузки видеопотока через твой локальный прокси-сервер
     function setVideoSource(rawUrl) {
         errorMsg.innerText = "";
         
-        // Кодируем ссылку, чтобы спецсимволы токена пиратов не ломали адрес прокси
-        const proxiedUrl = 'http://' + SERVER_HOST + '/video?url=' + encodeURIComponent(rawUrl);
+        // БЕЗОПАСНОСТЬ: Полностью изолируем пиратскую ссылку от ломания параметров сервера
+        const baseProxyUrl = 'http://' + SERVER_HOST + '/video';
+        const urlParams = new URLSearchParams();
+        urlParams.append('url', rawUrl);
+        const proxiedUrl = baseProxyUrl + '?' + urlParams.toString();
 
         if (hls) { 
             hls.destroy(); 
@@ -72,7 +72,7 @@
 
         if (Hls.isSupported()) {
             hls = new Hls({
-                maxBufferSize: 30 * 1000 * 1000, // 30MB буфер против лагов
+                maxBufferSize: 30 * 1000 * 1000,
                 enableWorker: true
             });
             hls.loadSource(proxiedUrl);
@@ -80,15 +80,11 @@
             
             hls.on(Hls.Events.ERROR, function (event, data) {
                 if (data.fatal) {
-                    errorMsg.innerText = "Ошибка воспроизведения потока. Возможно, ссылка устарела.";
-                    console.error("HLS fatal error:", data);
+                    errorMsg.innerText = "Ошибка загрузки видео. Попробуй обновить ссылку на пиратском сайте.";
                 }
             });
         } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-            // Для Safari / iOS
             video.src = proxiedUrl;
-        } else {
-            errorMsg.innerText = "Твой браузер не поддерживает воспроизведение этого формата видео.";
         }
         
         video.load();
@@ -108,10 +104,7 @@
 
     loadVideoBtn.addEventListener('click', () => {
         const url = videoUrlInput.value.trim();
-        if (!url) {
-            errorMsg.innerText = "Поле ввода пустое! Вставь ссылку.";
-            return;
-        }
+        if (!url) return;
         
         setVideoSource(url);
         if (socket.readyState === WebSocket.OPEN) {
