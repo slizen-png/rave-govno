@@ -39,6 +39,8 @@
     const videoUrlInput = document.getElementById('video-url');
     const loadVideoBtn = document.getElementById('load-video-btn');
     const errorMsg = document.getElementById('error-msg');
+    const TUNNEL_HOST = 'fuzzy-towns-nail.loca.lt';
+
 
     const SERVER_HOST = 'localhost:8080'; 
     const socket = new WebSocket('ws://' + SERVER_HOST);
